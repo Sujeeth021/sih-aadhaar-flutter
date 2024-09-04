@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 
 void main() {
   runApp(MyApp());
@@ -9,32 +8,33 @@ class MyApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'Flutter Demo',
-      home: MyHomePage(),
+      home: EncryptionScreen(),
     );
   }
 }
 
-class MyHomePage extends StatefulWidget {
+class EncryptionScreen extends StatefulWidget {
   @override
-  _MyHomePageState createState() => _MyHomePageState();
+  _EncryptionScreenState createState() => _EncryptionScreenState();
 }
 
-class _MyHomePageState extends State<MyHomePage> {
-  static const platform = MethodChannel('com.example.main/platform_channel');
-  String _message = 'Waiting for message...';
+class _EncryptionScreenState extends State<EncryptionScreen> {
+  final TextEditingController _inputController = TextEditingController();
+  final TextEditingController _keyController = TextEditingController();
+  final TextEditingController _decryptionKeyController = TextEditingController();
 
-  Future<void> _getNativeMessage() async {
-    String message;
-    try {
-      final String result = await platform.invokeMethod('getNativeMessage');
-      message = result;
-    } on PlatformException catch (e) {
-      message = "Failed to get message: '${e.message}'.";
-    }
+  String? _encryptedText;
+  String? _decryptedText;
 
+  void _encryptText() {
     setState(() {
-      _message = message;
+      _encryptedText = "Encrypted: ${_inputController.text}";
+    });
+  }
+
+  void _decryptText() {
+    setState(() {
+      _decryptedText = "Decrypted: ${_decryptionKeyController.text}";
     });
   }
 
@@ -42,21 +42,52 @@ class _MyHomePageState extends State<MyHomePage> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: Text('Platform Channel Example'),
+        title: Text('Encrypt & Decrypt Text'),
       ),
-      body: Center(
+      body: Padding(
+        padding: const EdgeInsets.all(16.0),
         child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
           children: <Widget>[
-            Text(_message),
+            TextField(
+              controller: _inputController,
+              decoration: InputDecoration(labelText: 'Enter text to encrypt'),
+            ),
+            TextField(
+              controller: _keyController,
+              decoration: InputDecoration(labelText: 'Enter encryption key'),
+            ),
             SizedBox(height: 20),
             ElevatedButton(
-              onPressed: _getNativeMessage,
-              child: Text('Get Native Message'),
+              onPressed: _encryptText,
+              child: Text('Encrypt'),
             ),
+            SizedBox(height: 20),
+            if (_encryptedText != null)
+              Text(_encryptedText!, style: TextStyle(fontWeight: FontWeight.bold)),
+            SizedBox(height: 20),
+            TextField(
+              controller: _decryptionKeyController,
+              decoration: InputDecoration(labelText: 'Enter key to decrypt'),
+            ),
+            SizedBox(height: 20),
+            ElevatedButton(
+              onPressed: _decryptText,
+              child: Text('Decrypt'),
+            ),
+            SizedBox(height: 20),
+            if (_decryptedText != null)
+              Text(_decryptedText!, style: TextStyle(fontWeight: FontWeight.bold)),
           ],
         ),
       ),
     );
+  }
+
+  @override
+  void dispose() {
+    _inputController.dispose();
+    _keyController.dispose();
+    _decryptionKeyController.dispose();
+    super.dispose();
   }
 }
