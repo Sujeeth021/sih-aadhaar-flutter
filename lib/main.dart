@@ -52,6 +52,20 @@ class _MyHomePageState extends State<MyHomePage> {
     });
   }
 
+  Future<void> _requestBiometricAuth() async {
+    String message;
+    try {
+      final String result = await platform.invokeMethod('requestBiometricAuth');
+      message = result;
+    } on PlatformException catch (e) {
+      message = "Failed to authenticate: '${e.message}'.";
+    }
+
+    setState(() {
+      _message = message;
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -72,6 +86,11 @@ class _MyHomePageState extends State<MyHomePage> {
             ElevatedButton(
               onPressed: _checkAndGenerateKeyPair,
               child: Text('Check and Generate Key Pair'),
+            ),
+            SizedBox(height: 20),
+            ElevatedButton(
+              onPressed: _requestBiometricAuth,
+              child: Text('Request Biometric Authentication'),
             ),
           ],
         ),

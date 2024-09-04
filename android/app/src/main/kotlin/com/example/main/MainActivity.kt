@@ -2,14 +2,19 @@ package com.example.main
 
 import android.security.keystore.KeyGenParameterSpec
 import android.security.keystore.KeyProperties
-import io.flutter.embedding.android.FlutterActivity
+import android.util.Log
+import androidx.biometric.BiometricPrompt
+import androidx.core.content.ContextCompat
+import io.flutter.embedding.android.FlutterFragmentActivity
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.MethodChannel
+import java.math.BigInteger
 import java.security.KeyPairGenerator
 import java.security.KeyStore
 import javax.security.auth.x500.X500Principal
+import java.util.concurrent.Executor
 
-class MainActivity : FlutterActivity() {
+class MainActivity : FlutterFragmentActivity() {
     private val CHANNEL = "com.example.main/platform_channel"
     private val alias = "key_alias"
 
@@ -24,6 +29,11 @@ class MainActivity : FlutterActivity() {
                     "checkAndGenerateKeyPair" -> {
                         val message = checkAndGenerateKeyPair()
                         result.success(message)
+                    }
+                    "requestBiometricAuth" -> {
+                        requestBiometricAuthentication { authResult ->
+                            result.success(authResult)
+                        }
                     }
                     else -> {
                         result.notImplemented()
@@ -56,7 +66,7 @@ class MainActivity : FlutterActivity() {
                 KeyProperties.PURPOSE_SIGN or KeyProperties.PURPOSE_VERIFY
             )
                 .setCertificateSubject(X500Principal("CN=$alias"))
-                .setCertificateSerialNumber(java.math.BigInteger.ONE)
+                .setCertificateSerialNumber(BigInteger.ONE)
                 .setCertificateNotBefore(java.util.Date())
                 .setCertificateNotAfter(java.util.Date(System.currentTimeMillis() + 365 * 24 * 60 * 60 * 1000)) // 1 year validity
                 .setDigests(KeyProperties.DIGEST_SHA256)
@@ -64,5 +74,32 @@ class MainActivity : FlutterActivity() {
                 .build()
         )
         keyPairGenerator.generateKeyPair()
+    }
+
+    private fun requestBiometricAuthentication(onResult: (String) -> Unit) {
+        val executor: Executor = ContextCompat.getMainExecutor(this)
+        val biometricPrompt = BiometricPrompt(this, executor, object : BiometricPrompt.AuthenticationCallback() {
+            override fun onAuthenticationError(errorCode: Int, errString: CharSequence) {
+                val errorMsg = "Authentication error: $errString (Code: $errorCode)"
+                Log.e("BiometricAuth", errorMsg)
+                onResult(errorMsg)
+            }
+
+            override fun onAuthenticationSucceeded(result: BiometricPrompt.AuthenticationResult) {
+                onResult("Authentication succeeded!")
+            }
+
+            override fun onAuthenticationFailed() {
+                onResult("Authentication failed")
+            }
+        })
+
+        val promptInfo = BiometricPrompt.PromptInfo.Builder()
+            .setTitle("Biometric Authentication")
+            .setSubtitle("Authenticate using your biometric credential")
+            .setNegativeButtonText("Cancel")
+            .build()
+
+        biometricPrompt.authenticate(promptInfo)
     }
 }
