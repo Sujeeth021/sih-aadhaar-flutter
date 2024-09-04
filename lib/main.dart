@@ -49,10 +49,6 @@ class _EncryptionScreenState extends State<EncryptionScreen> {
         child: Column(
           children: <Widget>[
             TextField(
-              controller: _inputController,
-              decoration: InputDecoration(labelText: 'Enter text to encrypt'),
-            ),
-            TextField(
               controller: _keyController,
               decoration: InputDecoration(labelText: 'Enter encryption key'),
             ),
