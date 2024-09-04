@@ -38,6 +38,20 @@ class _MyHomePageState extends State<MyHomePage> {
     });
   }
 
+  Future<void> _checkAndGenerateKeyPair() async {
+    String message;
+    try {
+      final String result = await platform.invokeMethod('checkAndGenerateKeyPair');
+      message = result;
+    } on PlatformException catch (e) {
+      message = "Failed to generate key pair: '${e.message}'.";
+    }
+
+    setState(() {
+      _message = message;
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -53,6 +67,11 @@ class _MyHomePageState extends State<MyHomePage> {
             ElevatedButton(
               onPressed: _getNativeMessage,
               child: Text('Get Native Message'),
+            ),
+            SizedBox(height: 20),
+            ElevatedButton(
+              onPressed: _checkAndGenerateKeyPair,
+              child: Text('Check and Generate Key Pair'),
             ),
           ],
         ),
