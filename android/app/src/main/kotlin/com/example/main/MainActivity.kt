@@ -2,6 +2,7 @@ package com.example.main
 
 import android.content.ClipboardManager
 import android.content.Context
+import android.provider.Settings.Secure
 import android.security.keystore.KeyGenParameterSpec
 import android.security.keystore.KeyProperties
 import android.util.Log
@@ -19,7 +20,7 @@ import java.util.concurrent.Executor
 
 class MainActivity : FlutterFragmentActivity() {
     private val CHANNEL = "com.example.main/platform_channel"
-    private val alias = "key_alias"
+    private val aliasPrefix = "key_alias_"
     private var signedData: ByteArray? = null // To store signed data
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
@@ -31,8 +32,8 @@ class MainActivity : FlutterFragmentActivity() {
                         result.success("Hello from Android!")
                     }
                     "checkAndGenerateKeyPair" -> {
-                        val message = checkAndGenerateKeyPair()
-                        result.success(message)
+                        val (deviceId, message) = checkAndGenerateKeyPair()
+                        result.success("Device ID: $deviceId, $message")
                     }
                     "requestBiometricAuth" -> {
                         val textToSign = call.argument<String>("textToSign") ?: ""
@@ -58,23 +59,30 @@ class MainActivity : FlutterFragmentActivity() {
             }
     }
 
-    private fun checkAndGenerateKeyPair(): String {
+    private fun retrieveDeviceId(): String {
+        return Secure.getString(contentResolver, Secure.ANDROID_ID)
+    }
+
+    private fun checkAndGenerateKeyPair(): Pair<String, String> {
+        val deviceId = retrieveDeviceId()
+        val alias = "$aliasPrefix$deviceId"
+
         return try {
             val keyStore = KeyStore.getInstance("AndroidKeyStore")
             keyStore.load(null)
 
             if (keyStore.containsAlias(alias)) {
-                "Key Pair already exists with alias: $alias"
+                deviceId to "Key Pair already exists with alias: $alias"
             } else {
-                generateKeyPair()
-                "Key Pair generated successfully with alias: $alias"
+                generateKeyPair(alias)
+                deviceId to "Key Pair generated successfully with alias: $alias"
             }
         } catch (e: Exception) {
-            "Error checking key pair: ${e.message}"
+            deviceId to "Error checking key pair: ${e.message}"
         }
     }
 
-    private fun generateKeyPair() {
+    private fun generateKeyPair(alias: String) {
         val keyPairGenerator = KeyPairGenerator.getInstance("RSA", "AndroidKeyStore")
         keyPairGenerator.initialize(
             KeyGenParameterSpec.Builder(
@@ -119,6 +127,8 @@ class MainActivity : FlutterFragmentActivity() {
             .setNegativeButtonText("Cancel")
             .build()
 
+        val deviceId = retrieveDeviceId()
+        val alias = "$aliasPrefix$deviceId"
         val keyStore = KeyStore.getInstance("AndroidKeyStore").apply { load(null) }
         val key = keyStore.getKey(alias, null) as? java.security.PrivateKey
         val signature = Signature.getInstance("SHA256withRSA").apply {
@@ -153,6 +163,8 @@ class MainActivity : FlutterFragmentActivity() {
     }
 
     private fun verifySignature(signedKeyInput: String, originalText: String, onResult: (String) -> Unit) {
+        val deviceId = retrieveDeviceId()
+        val alias = "$aliasPrefix$deviceId"
         val keyStore = KeyStore.getInstance("AndroidKeyStore")
         keyStore.load(null)
 
