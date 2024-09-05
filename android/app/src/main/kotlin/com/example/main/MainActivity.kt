@@ -35,13 +35,15 @@ class MainActivity : FlutterFragmentActivity() {
                         result.success(message)
                     }
                     "requestBiometricAuth" -> {
-                        createBiometricPromptForSignature { authResult ->
+                        val textToSign = call.argument<String>("textToSign") ?: ""
+                        createBiometricPromptForSignature(textToSign) { authResult ->
                             result.success(authResult)
                         }
                     }
                     "verifySignature" -> {
                         val signedKeyInput = call.argument<String>("signedKeyInput") ?: ""
-                        verifySignature(signedKeyInput) { verificationResult ->
+                        val originalText = call.argument<String>("originalText") ?: ""
+                        verifySignature(signedKeyInput, originalText) { verificationResult ->
                             result.success(verificationResult)
                         }
                     }
@@ -90,7 +92,7 @@ class MainActivity : FlutterFragmentActivity() {
         keyPairGenerator.generateKeyPair()
     }
 
-    private fun createBiometricPromptForSignature(onResult: (String) -> Unit) {
+    private fun createBiometricPromptForSignature(textToSign: String, onResult: (String) -> Unit) {
         val executor: Executor = ContextCompat.getMainExecutor(this)
         val biometricPrompt = BiometricPrompt(this, executor, object : BiometricPrompt.AuthenticationCallback() {
             override fun onAuthenticationError(errorCode: Int, errString: CharSequence) {
@@ -101,7 +103,7 @@ class MainActivity : FlutterFragmentActivity() {
 
             override fun onAuthenticationSucceeded(result: BiometricPrompt.AuthenticationResult) {
                 val cryptoObject = result.cryptoObject
-                performKeyAccess(cryptoObject) { accessResult ->
+                performKeyAccess(textToSign, cryptoObject) { accessResult ->
                     onResult(accessResult)
                 }
             }
@@ -126,7 +128,7 @@ class MainActivity : FlutterFragmentActivity() {
         biometricPrompt.authenticate(promptInfo, BiometricPrompt.CryptoObject(signature))
     }
 
-    private fun performKeyAccess(cryptoObject: BiometricPrompt.CryptoObject?, onResult: (String) -> Unit) {
+    private fun performKeyAccess(textToSign: String, cryptoObject: BiometricPrompt.CryptoObject?, onResult: (String) -> Unit) {
         if (cryptoObject == null) {
             val errorMsg = "Error: CryptoObject is null, unable to sign data."
             Log.e("KeyAccess", errorMsg)
@@ -135,7 +137,7 @@ class MainActivity : FlutterFragmentActivity() {
         }
 
         val accessMessage = try {
-            val data = "Data to be signed".toByteArray()
+            val data = textToSign.toByteArray()
             val signature = cryptoObject.signature ?: throw IllegalStateException("No signature available")
             signature.update(data)
             signedData = signature.sign() // Save the signed data
@@ -150,7 +152,7 @@ class MainActivity : FlutterFragmentActivity() {
         onResult(accessMessage)
     }
 
-    private fun verifySignature(signedKeyInput: String, onResult: (String) -> Unit) {
+    private fun verifySignature(signedKeyInput: String, originalText: String, onResult: (String) -> Unit) {
         val keyStore = KeyStore.getInstance("AndroidKeyStore")
         keyStore.load(null)
 
@@ -170,7 +172,7 @@ class MainActivity : FlutterFragmentActivity() {
                 .toByteArray()
 
             // For verification, you need to match against the actual signed data
-            signature.update("Data to be signed".toByteArray())
+            signature.update(originalText.toByteArray())
             val isVerified = signature.verify(signedDataFromInput)
 
             if (isVerified) {

@@ -10,7 +10,7 @@ class MyApp extends StatelessWidget {
   Widget build(BuildContext context) {
     return MaterialApp(
       title: 'Flutter Demo',
-        debugShowCheckedModeBanner: false,
+      debugShowCheckedModeBanner: false,
       home: MyHomePage(),
     );
   }
@@ -26,6 +26,7 @@ class _MyHomePageState extends State<MyHomePage> {
   String _message = 'Waiting for message...';
   String _signedKeyInput = '';
   String _verificationResult = '';
+  String _textToSign = '';
 
   Future<void> _getNativeMessage() async {
     String message;
@@ -58,7 +59,7 @@ class _MyHomePageState extends State<MyHomePage> {
   Future<void> _requestBiometricAuth() async {
     String message;
     try {
-      final String result = await platform.invokeMethod('requestBiometricAuth');
+      final String result = await platform.invokeMethod('requestBiometricAuth', {'textToSign': _textToSign});
       message = result;
     } on PlatformException catch (e) {
       message = "Failed to authenticate: '${e.message}'.";
@@ -72,7 +73,7 @@ class _MyHomePageState extends State<MyHomePage> {
   Future<void> _verifySignature() async {
     String verificationResult;
     try {
-      final String result = await platform.invokeMethod('verifySignature', {'signedKeyInput': _signedKeyInput});
+      final String result = await platform.invokeMethod('verifySignature', {'signedKeyInput': _signedKeyInput, 'originalText': _textToSign});
       verificationResult = result;
     } on PlatformException catch (e) {
       verificationResult = "Failed to verify signature: '${e.message}'.";
@@ -116,9 +117,18 @@ class _MyHomePageState extends State<MyHomePage> {
                 child: Text('Check and Generate Key Pair'),
               ),
               SizedBox(height: 20),
+              TextField(
+                decoration: InputDecoration(labelText: 'Enter text to sign'),
+                onChanged: (value) {
+                  setState(() {
+                    _textToSign = value;
+                  });
+                },
+              ),
+              SizedBox(height: 20),
               ElevatedButton(
                 onPressed: _requestBiometricAuth,
-                child: Text('Request Biometric Authentication'),
+                child: Text('Sign Text with Biometric Authentication'),
               ),
               SizedBox(height: 20),
               TextField(
