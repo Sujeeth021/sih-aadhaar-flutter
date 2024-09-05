@@ -28,13 +28,13 @@ class _EncryptionScreenState extends State<EncryptionScreen> {
 
   void _encryptText() {
     setState(() {
-      _encryptedText = "Encrypted: ${_inputController.text}";
+      _encryptedText = "Encrypted key: ${_inputController.text}";
     });
   }
 
   void _decryptText() {
     setState(() {
-      _decryptedText = "Decrypted: ${_decryptionKeyController.text}";
+      _decryptedText = "Decrypted key: ${_decryptionKeyController.text}";
     });
   }
 
