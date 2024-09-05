@@ -83,7 +83,7 @@ class MainActivity : FlutterFragmentActivity() {
     }
 
     private fun generateKeyPair(alias: String) {
-        val keyPairGenerator = KeyPairGenerator.getInstance("RSA", "AndroidKeyStore")
+        val keyPairGenerator = KeyPairGenerator.getInstance(KeyProperties.KEY_ALGORITHM_EC, "AndroidKeyStore")
         keyPairGenerator.initialize(
             KeyGenParameterSpec.Builder(
                 alias,
@@ -93,8 +93,8 @@ class MainActivity : FlutterFragmentActivity() {
                 .setCertificateSerialNumber(BigInteger.ONE)
                 .setCertificateNotBefore(java.util.Date())
                 .setCertificateNotAfter(java.util.Date(System.currentTimeMillis() + 365 * 24 * 60 * 60 * 1000)) // 1 year validity
-                .setDigests(KeyProperties.DIGEST_SHA256)
-                .setSignaturePaddings(KeyProperties.SIGNATURE_PADDING_RSA_PKCS1)
+                .setDigests(KeyProperties.DIGEST_SHA256, KeyProperties.DIGEST_SHA512)
+                .setUserAuthenticationRequired(true)
                 .build()
         )
         keyPairGenerator.generateKeyPair()
@@ -131,7 +131,7 @@ class MainActivity : FlutterFragmentActivity() {
         val alias = "$aliasPrefix$deviceId"
         val keyStore = KeyStore.getInstance("AndroidKeyStore").apply { load(null) }
         val key = keyStore.getKey(alias, null) as? java.security.PrivateKey
-        val signature = Signature.getInstance("SHA256withRSA").apply {
+        val signature = Signature.getInstance("SHA256withECDSA").apply {
             initSign(key)
         }
 
@@ -176,7 +176,7 @@ class MainActivity : FlutterFragmentActivity() {
         try {
             val publicKeyEntry = keyStore.getEntry(alias, null) as KeyStore.PrivateKeyEntry
             val publicKey = publicKeyEntry.certificate.publicKey
-            val signature = Signature.getInstance("SHA256withRSA")
+            val signature = Signature.getInstance("SHA256withECDSA")
             signature.initVerify(publicKey)
 
             val signedDataFromInput = signedKeyInput.chunked(2)
