@@ -2,15 +2,22 @@ package com.example.main
 
 import android.content.ClipboardManager
 import android.content.Context
+import android.graphics.Bitmap
+import android.graphics.BitmapFactory
 import android.provider.Settings.Secure
 import android.security.keystore.KeyGenParameterSpec
 import android.security.keystore.KeyProperties
+import android.util.Base64
 import android.util.Log
 import androidx.biometric.BiometricPrompt
 import androidx.core.content.ContextCompat
 import io.flutter.embedding.android.FlutterFragmentActivity
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.MethodChannel
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import java.math.BigInteger
 import java.security.KeyPairGenerator
 import java.security.KeyStore
@@ -22,6 +29,7 @@ class MainActivity : FlutterFragmentActivity() {
     private val CHANNEL = "com.example.main/platform_channel"
     private val aliasPrefix = "key_alias_"
     private var signedData: ByteArray? = null // To store signed data
+    private var imageData: ByteArray? = null // To store image data
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
@@ -36,15 +44,17 @@ class MainActivity : FlutterFragmentActivity() {
                         result.success("Device ID: $deviceId, $message")
                     }
                     "requestBiometricAuth" -> {
-                        val textToSign = call.argument<String>("textToSign") ?: ""
-                        createBiometricPromptForSignature(textToSign) { authResult ->
+                        val imageBase64 = call.argument<String>("imageBase64") ?: ""
+                        imageData = Base64.decode(imageBase64, Base64.DEFAULT)
+                        createBiometricPromptForSignature { authResult ->
                             result.success(authResult)
                         }
                     }
                     "verifySignature" -> {
                         val signedKeyInput = call.argument<String>("signedKeyInput") ?: ""
-                        val originalText = call.argument<String>("originalText") ?: ""
-                        verifySignature(signedKeyInput, originalText) { verificationResult ->
+                        val imageBase64 = call.argument<String>("imageBase64") ?: ""
+                        imageData = Base64.decode(imageBase64, Base64.DEFAULT)
+                        verifySignature(signedKeyInput) { verificationResult ->
                             result.success(verificationResult)
                         }
                     }
@@ -68,8 +78,7 @@ class MainActivity : FlutterFragmentActivity() {
         val alias = "$aliasPrefix$deviceId"
 
         return try {
-            val keyStore = KeyStore.getInstance("AndroidKeyStore")
-            keyStore.load(null)
+            val keyStore = KeyStore.getInstance("AndroidKeyStore").apply { load(null) }
 
             if (keyStore.containsAlias(alias)) {
                 deviceId to "Key Pair already exists with alias: $alias"
@@ -100,7 +109,7 @@ class MainActivity : FlutterFragmentActivity() {
         keyPairGenerator.generateKeyPair()
     }
 
-    private fun createBiometricPromptForSignature(textToSign: String, onResult: (String) -> Unit) {
+    private fun createBiometricPromptForSignature(onResult: (String) -> Unit) {
         val executor: Executor = ContextCompat.getMainExecutor(this)
         val biometricPrompt = BiometricPrompt(this, executor, object : BiometricPrompt.AuthenticationCallback() {
             override fun onAuthenticationError(errorCode: Int, errString: CharSequence) {
@@ -111,7 +120,7 @@ class MainActivity : FlutterFragmentActivity() {
 
             override fun onAuthenticationSucceeded(result: BiometricPrompt.AuthenticationResult) {
                 val cryptoObject = result.cryptoObject
-                performKeyAccess(textToSign, cryptoObject) { accessResult ->
+                performKeyAccess(cryptoObject) { accessResult ->
                     onResult(accessResult)
                 }
             }
@@ -138,7 +147,7 @@ class MainActivity : FlutterFragmentActivity() {
         biometricPrompt.authenticate(promptInfo, BiometricPrompt.CryptoObject(signature))
     }
 
-    private fun performKeyAccess(textToSign: String, cryptoObject: BiometricPrompt.CryptoObject?, onResult: (String) -> Unit) {
+    private fun performKeyAccess(cryptoObject: BiometricPrompt.CryptoObject?, onResult: (String) -> Unit) {
         if (cryptoObject == null) {
             val errorMsg = "Error: CryptoObject is null, unable to sign data."
             Log.e("KeyAccess", errorMsg)
@@ -146,70 +155,81 @@ class MainActivity : FlutterFragmentActivity() {
             return
         }
 
-        val accessMessage = try {
-            val data = textToSign.toByteArray()
-            val signature = cryptoObject.signature ?: throw IllegalStateException("No signature available")
-            signature.update(data)
-            signedData = signature.sign() // Save the signed data
+        CoroutineScope(Dispatchers.IO).launch {
+            val accessMessage = try {
+                if (imageData == null) {
+                    throw IllegalStateException("Image data is null")
+                }
 
-            // Convert signed data to a hex string for display
-            "Key Accessed Successfully. Signed Data: ${signedData!!.joinToString("") { "%02x".format(it) }}"
-        } catch (e: Exception) {
-            val errorMsg = "Error accessing key: ${e.message}"
-            Log.e("KeyAccess", errorMsg, e)
-            errorMsg
+                val signature = cryptoObject.signature ?: throw IllegalStateException("No signature available")
+                signature.update(imageData)
+                signedData = signature.sign() // Save the signed data
+
+                // Convert signed data to a hex string for display
+                val signedDataHex = signedData!!.joinToString("") { "%02x".format(it) }
+                "Key Accessed Successfully. Signed Data: $signedDataHex"
+            } catch (e: Exception) {
+                val errorMsg = "Error accessing key: ${e.message}"
+                Log.e("KeyAccess", errorMsg, e)
+                errorMsg
+            }
+            withContext(Dispatchers.Main) {
+                onResult(accessMessage)
+            }
         }
-        onResult(accessMessage)
     }
 
-    private fun verifySignature(signedKeyInput: String, originalText: String, onResult: (String) -> Unit) {
+    private fun verifySignature(signedKeyInput: String, onResult: (String) -> Unit) {
         val deviceId = retrieveDeviceId()
         val alias = "$aliasPrefix$deviceId"
-        val keyStore = KeyStore.getInstance("AndroidKeyStore")
-        keyStore.load(null)
+        val keyStore = KeyStore.getInstance("AndroidKeyStore").apply { load(null) }
 
         if (!keyStore.containsAlias(alias)) {
             onResult("Error: Key does not exist.")
             return
         }
 
-        try {
-            val publicKeyEntry = keyStore.getEntry(alias, null) as KeyStore.PrivateKeyEntry
-            val publicKey = publicKeyEntry.certificate.publicKey
-            val signature = Signature.getInstance("SHA256withECDSA")
-            signature.initVerify(publicKey)
+        CoroutineScope(Dispatchers.IO).launch {
+            val verificationResult = try {
+                val publicKeyEntry = keyStore.getEntry(alias, null) as KeyStore.PrivateKeyEntry
+                val publicKey = publicKeyEntry.certificate.publicKey
+                val signature = Signature.getInstance("SHA256withECDSA").apply {
+                    initVerify(publicKey)
+                }
 
-            val signedDataFromInput = signedKeyInput.chunked(2)
-                .map { it.toInt(16).toByte() }
-                .toByteArray()
+                // Convert the hex string input to a byte array
+                val signedDataFromInput = signedKeyInput.chunked(2)
+                    .mapNotNull { it.toIntOrNull(16)?.toByte() }
+                    .toByteArray()
 
-            // For verification, you need to match against the actual signed data
-            signature.update(originalText.toByteArray())
-            val isVerified = signature.verify(signedDataFromInput)
+                // Verify the signature using the image data used for signing
+                if (imageData == null) {
+                    throw IllegalStateException("Image data is null")
+                }
+                signature.update(imageData)
+                val isVerified = signature.verify(signedDataFromInput)
 
-            if (isVerified) {
-                onResult("Signature verification succeeded. The data is valid.")
-            } else {
-                onResult("Signature verification failed.")
+                "Signature verification result: $isVerified"
+            } catch (e: Exception) {
+                val errorMsg = "Error verifying signature: ${e.message}"
+                Log.e("SignatureVerification", errorMsg, e)
+                errorMsg
             }
-        } catch (e: Exception) {
-            val errorMsg = "Error verifying signature: ${e.message}"
-            Log.e("VerifySignature", errorMsg, e)
-            onResult(errorMsg)
+            withContext(Dispatchers.Main) {
+                onResult(verificationResult)
+            }
         }
     }
 
     private fun copySignedKeyToClipboard() {
         val clipboard = getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-        val clip = signedData?.let {
-            val signedKeyHex = it.joinToString("") { "%02x".format(it) }
-            android.content.ClipData.newPlainText("Signed Key", signedKeyHex)
-        }
-        if (clip != null) {
+        val signedDataHex = signedData?.joinToString("") { "%02x".format(it) }
+
+        if (signedDataHex != null) {
+            val clip = android.content.ClipData.newPlainText("Signed Key", signedDataHex)
             clipboard.setPrimaryClip(clip)
-            Log.d("Clipboard", "Signed Key copied to clipboard.")
         } else {
-            Log.e("Clipboard", "No signed key available to copy.")
+            Log.e("Clipboard", "No signed data available to copy.")
         }
     }
 }

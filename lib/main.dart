@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:image_picker/image_picker.dart';
 import 'dart:io';
+import 'dart:convert';
 
 void main() {
   runApp(MyApp());
@@ -12,7 +13,9 @@ class MyApp extends StatelessWidget {
   Widget build(BuildContext context) {
     return MaterialApp(
       title: 'Flutter Demo',
-      debugShowCheckedModeBanner: false,
+      theme: ThemeData(
+        primarySwatch: Colors.blue,
+      ),
       home: MyHomePage(),
     );
   }
@@ -25,13 +28,12 @@ class MyHomePage extends StatefulWidget {
 
 class _MyHomePageState extends State<MyHomePage> {
   static const platform = MethodChannel('com.example.main/platform_channel');
-  String _message = 'Waiting for message...';
-  String _signedKeyInput = '';
-  String _verificationResult = '';
-  String _textToSign = '';
-  File? _image;
-
   final ImagePicker _picker = ImagePicker();
+  File? _image;
+  String _message = "";
+  String _verificationResult = "";
+
+  final TextEditingController _signatureController = TextEditingController();
 
   Future<void> _getNativeMessage() async {
     String message;
@@ -39,7 +41,7 @@ class _MyHomePageState extends State<MyHomePage> {
       final String result = await platform.invokeMethod('getNativeMessage');
       message = result;
     } on PlatformException catch (e) {
-      message = "Failed to get message: '${e.message}'.";
+      message = "Failed to get native message: '${e.message}'.";
     }
 
     setState(() {
@@ -53,7 +55,7 @@ class _MyHomePageState extends State<MyHomePage> {
       final String result = await platform.invokeMethod('checkAndGenerateKeyPair');
       message = result;
     } on PlatformException catch (e) {
-      message = "Failed to generate key pair: '${e.message}'.";
+      message = "Failed to check and generate key pair: '${e.message}'.";
     }
 
     setState(() {
@@ -62,45 +64,28 @@ class _MyHomePageState extends State<MyHomePage> {
   }
 
   Future<void> _requestBiometricAuth() async {
-    String message;
+    if (_image == null) {
+      setState(() {
+        _message = "No image selected.";
+      });
+      return;
+    }
+
     try {
+      final imageBytes = await _image!.readAsBytes();
+      final imageBase64 = base64Encode(imageBytes);
+
       final String result = await platform.invokeMethod('requestBiometricAuth', {
-        'textToSign': _textToSign,
-        'imagePath': _image?.path, // Pass the image path to the native platform
+        'imageBase64': imageBase64, // Pass the Base64 string to the native platform
       });
-      message = result;
-    } on PlatformException catch (e) {
-      message = "Failed to authenticate: '${e.message}'.";
-    }
 
-    setState(() {
-      _message = message;
-    });
-  }
-
-  Future<void> _verifySignature() async {
-    String verificationResult;
-    try {
-      final String result = await platform.invokeMethod('verifySignature', {
-        'signedKeyInput': _signedKeyInput,
-        'originalText': _textToSign,
+      setState(() {
+        _message = result;
       });
-      verificationResult = result;
     } on PlatformException catch (e) {
-      verificationResult = "Failed to verify signature: '${e.message}'.";
-    }
-
-    setState(() {
-      _verificationResult = verificationResult;
-    });
-  }
-
-  Future<void> _copySignedKey() async {
-    try {
-      await platform.invokeMethod('copySignedKeyToClipboard');
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Signed key copied to clipboard.')));
-    } on PlatformException catch (e) {
-      print("Failed to copy signed key: '${e.message}'.");
+      setState(() {
+        _message = "Failed to authenticate: '${e.message}'.";
+      });
     }
   }
 
@@ -111,6 +96,55 @@ class _MyHomePageState extends State<MyHomePage> {
         _image = File(image.path);
       });
     }
+  }
+
+  Future<void> _verifySignature() async {
+    try {
+      final String signedKey = _signatureController.text;
+// Replace with the actual original text used for signing
+
+      if (_image == null) {
+        setState(() {
+          _verificationResult = "No image selected.";
+        });
+        return;
+      }
+
+      final imageBytes = await _image!.readAsBytes();
+      final imageBase64 = base64Encode(imageBytes);
+
+      final String verificationResult = await platform.invokeMethod('verifySignature', {
+        'signedKeyInput': signedKey,
+        'imageBase64': imageBase64, // Pass Base64-encoded image data for verification
+      });
+
+      setState(() {
+        _verificationResult = verificationResult;
+      });
+    } on PlatformException catch (e) {
+      setState(() {
+        _verificationResult = "Failed to verify signature: '${e.message}'.";
+      });
+    }
+  }
+
+  Future<void> _copySignedKey() async {
+    try {
+      final String result = await platform.invokeMethod('copySignedKeyToClipboard');
+      setState(() {
+        _message = result;
+      });
+    } on PlatformException catch (e) {
+      setState(() {
+        _message = "Failed to copy signed key: '${e.message}'.";
+      });
+    }
+  }
+
+  @override
+  void dispose() {
+    _signatureController.dispose(); // Dispose the controller to free resources
+    super.dispose();
   }
 
   @override
@@ -138,15 +172,6 @@ class _MyHomePageState extends State<MyHomePage> {
                   child: Text('Check and Generate Key Pair'),
                 ),
                 SizedBox(height: 20),
-                TextField(
-                  decoration: InputDecoration(labelText: 'Enter text to sign'),
-                  onChanged: (value) {
-                    setState(() {
-                      _textToSign = value;
-                    });
-                  },
-                ),
-                SizedBox(height: 20),
                 ElevatedButton(
                   onPressed: _getImageFromCamera,
                   child: Text('Capture Image'),
@@ -158,16 +183,17 @@ class _MyHomePageState extends State<MyHomePage> {
                 ],
                 ElevatedButton(
                   onPressed: _requestBiometricAuth,
-                  child: Text('Sign Text with Biometric Authentication'),
+                  child: Text('Sign Image with Biometric Authentication'),
                 ),
                 SizedBox(height: 20),
+                // TextField for pasting the signed key
                 TextField(
-                  decoration: InputDecoration(labelText: 'Enter signed key input'),
-                  onChanged: (value) {
-                    setState(() {
-                      _signedKeyInput = value;
-                    });
-                  },
+                  controller: _signatureController,
+                  decoration: InputDecoration(
+                    border: OutlineInputBorder(),
+                    labelText: 'Paste Signed Key',
+                  ),
+                  maxLines: 1,
                 ),
                 SizedBox(height: 20),
                 ElevatedButton(
