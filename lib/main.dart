@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import 'package:image_picker/image_picker.dart';
+import 'dart:io';
 
 void main() {
   runApp(MyApp());
@@ -25,6 +27,7 @@ class _EncryptionScreenState extends State<EncryptionScreen> {
 
   String? _encryptedText;
   String? _decryptedText;
+  File? _image;
 
   void _encryptText() {
     setState(() {
@@ -36,6 +39,15 @@ class _EncryptionScreenState extends State<EncryptionScreen> {
     setState(() {
       _decryptedText = "Decrypted key: ${_decryptionKeyController.text}";
     });
+  }
+
+  Future<void> _pickImage() async {
+    final pickedFile = await ImagePicker().getImage(source: ImageSource.camera);
+    if (pickedFile != null) {
+      setState(() {
+        _image = File(pickedFile.path);
+      });
+    }
   }
 
   @override
@@ -73,6 +85,17 @@ class _EncryptionScreenState extends State<EncryptionScreen> {
             SizedBox(height: 20),
             if (_decryptedText != null)
               Text(_decryptedText!, style: TextStyle(fontWeight: FontWeight.bold)),
+            SizedBox(height: 20),
+            ElevatedButton(
+              onPressed: _pickImage,
+              child: Text('Take Picture'),
+            ),
+            SizedBox(height: 20),
+            if (_image != null)
+              Image.file(
+                _image!,
+                height: 200,
+              ),
           ],
         ),
       ),
