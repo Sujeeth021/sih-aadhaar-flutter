@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:image_picker/image_picker.dart';
+import 'dart:io';
 
 void main() {
   runApp(MyApp());
@@ -27,6 +29,9 @@ class _MyHomePageState extends State<MyHomePage> {
   String _signedKeyInput = '';
   String _verificationResult = '';
   String _textToSign = '';
+  File? _image;
+
+  final ImagePicker _picker = ImagePicker();
 
   Future<void> _getNativeMessage() async {
     String message;
@@ -59,7 +64,10 @@ class _MyHomePageState extends State<MyHomePage> {
   Future<void> _requestBiometricAuth() async {
     String message;
     try {
-      final String result = await platform.invokeMethod('requestBiometricAuth', {'textToSign': _textToSign});
+      final String result = await platform.invokeMethod('requestBiometricAuth', {
+        'textToSign': _textToSign,
+        'imagePath': _image?.path, // Pass the image path to the native platform
+      });
       message = result;
     } on PlatformException catch (e) {
       message = "Failed to authenticate: '${e.message}'.";
@@ -73,7 +81,10 @@ class _MyHomePageState extends State<MyHomePage> {
   Future<void> _verifySignature() async {
     String verificationResult;
     try {
-      final String result = await platform.invokeMethod('verifySignature', {'signedKeyInput': _signedKeyInput, 'originalText': _textToSign});
+      final String result = await platform.invokeMethod('verifySignature', {
+        'signedKeyInput': _signedKeyInput,
+        'originalText': _textToSign,
+      });
       verificationResult = result;
     } on PlatformException catch (e) {
       verificationResult = "Failed to verify signature: '${e.message}'.";
@@ -93,65 +104,85 @@ class _MyHomePageState extends State<MyHomePage> {
     }
   }
 
+  Future<void> _getImageFromCamera() async {
+    final XFile? image = await _picker.pickImage(source: ImageSource.camera);
+    if (image != null) {
+      setState(() {
+        _image = File(image.path);
+      });
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: Text('Platform Channel Example'),
+        title: Text('Platform Channel Example with Camera'),
       ),
       body: Padding(
         padding: const EdgeInsets.all(16.0),
         child: Center(
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: <Widget>[
-              Text(_message),
-              SizedBox(height: 20),
-              ElevatedButton(
-                onPressed: _getNativeMessage,
-                child: Text('Get Native Message'),
-              ),
-              SizedBox(height: 20),
-              ElevatedButton(
-                onPressed: _checkAndGenerateKeyPair,
-                child: Text('Check and Generate Key Pair'),
-              ),
-              SizedBox(height: 20),
-              TextField(
-                decoration: InputDecoration(labelText: 'Enter text to sign'),
-                onChanged: (value) {
-                  setState(() {
-                    _textToSign = value;
-                  });
-                },
-              ),
-              SizedBox(height: 20),
-              ElevatedButton(
-                onPressed: _requestBiometricAuth,
-                child: Text('Sign Text with Biometric Authentication'),
-              ),
-              SizedBox(height: 20),
-              TextField(
-                decoration: InputDecoration(labelText: 'Enter signed key input'),
-                onChanged: (value) {
-                  setState(() {
-                    _signedKeyInput = value;
-                  });
-                },
-              ),
-              SizedBox(height: 20),
-              ElevatedButton(
-                onPressed: _verifySignature,
-                child: Text('Verify Signature'),
-              ),
-              SizedBox(height: 20),
-              Text('Verification Result: $_verificationResult'),
-              SizedBox(height: 20),
-              ElevatedButton(
-                onPressed: _copySignedKey,
-                child: Text('Copy Signed Key to Clipboard'),
-              ),
-            ],
+          child: SingleChildScrollView(
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: <Widget>[
+                Text(_message),
+                SizedBox(height: 20),
+                ElevatedButton(
+                  onPressed: _getNativeMessage,
+                  child: Text('Get Native Message'),
+                ),
+                SizedBox(height: 20),
+                ElevatedButton(
+                  onPressed: _checkAndGenerateKeyPair,
+                  child: Text('Check and Generate Key Pair'),
+                ),
+                SizedBox(height: 20),
+                TextField(
+                  decoration: InputDecoration(labelText: 'Enter text to sign'),
+                  onChanged: (value) {
+                    setState(() {
+                      _textToSign = value;
+                    });
+                  },
+                ),
+                SizedBox(height: 20),
+                ElevatedButton(
+                  onPressed: _getImageFromCamera,
+                  child: Text('Capture Image'),
+                ),
+                SizedBox(height: 20),
+                if (_image != null) ...[
+                  Image.file(_image!),
+                  SizedBox(height: 20),
+                ],
+                ElevatedButton(
+                  onPressed: _requestBiometricAuth,
+                  child: Text('Sign Text with Biometric Authentication'),
+                ),
+                SizedBox(height: 20),
+                TextField(
+                  decoration: InputDecoration(labelText: 'Enter signed key input'),
+                  onChanged: (value) {
+                    setState(() {
+                      _signedKeyInput = value;
+                    });
+                  },
+                ),
+                SizedBox(height: 20),
+                ElevatedButton(
+                  onPressed: _verifySignature,
+                  child: Text('Verify Signature'),
+                ),
+                SizedBox(height: 20),
+                Text('Verification Result: $_verificationResult'),
+                SizedBox(height: 20),
+                ElevatedButton(
+                  onPressed: _copySignedKey,
+                  child: Text('Copy Signed Key to Clipboard'),
+                ),
+              ],
+            ),
           ),
         ),
       ),
