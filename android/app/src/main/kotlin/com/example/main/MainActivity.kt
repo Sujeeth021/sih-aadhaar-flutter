@@ -11,6 +11,7 @@ import io.flutter.plugin.common.MethodChannel
 import java.math.BigInteger
 import java.security.KeyPairGenerator
 import java.security.KeyStore
+import java.security.Signature
 import javax.security.auth.x500.X500Principal
 import java.util.concurrent.Executor
 
@@ -31,7 +32,7 @@ class MainActivity : FlutterFragmentActivity() {
                         result.success(message)
                     }
                     "requestBiometricAuth" -> {
-                        requestBiometricAuthentication { authResult ->
+                        createBiometricPromptForSignature { authResult ->
                             result.success(authResult)
                         }
                     }
@@ -76,9 +77,28 @@ class MainActivity : FlutterFragmentActivity() {
         keyPairGenerator.generateKeyPair()
     }
 
-    private fun requestBiometricAuthentication(onResult: (String) -> Unit) {
-        val executor: Executor = ContextCompat.getMainExecutor(this)
-        val biometricPrompt = BiometricPrompt(this, executor, object : BiometricPrompt.AuthenticationCallback() {
+    private fun createBiometricPromptForSignature(onResult: (String) -> Unit) {
+        val keyStore = KeyStore.getInstance("AndroidKeyStore").apply { load(null) }
+        val keyPairGenerator = KeyPairGenerator.getInstance("RSA", "AndroidKeyStore")
+        val keyGenParameterSpec = KeyGenParameterSpec.Builder(
+            alias,
+            KeyProperties.PURPOSE_SIGN or KeyProperties.PURPOSE_VERIFY
+        )
+            .setCertificateSubject(X500Principal("CN=$alias"))
+            .setCertificateSerialNumber(BigInteger.ONE)
+            .setCertificateNotBefore(java.util.Date())
+            .setCertificateNotAfter(java.util.Date(System.currentTimeMillis() + 365 * 24 * 60 * 60 * 1000)) // 1 year validity
+            .setDigests(KeyProperties.DIGEST_SHA256)
+            .setSignaturePaddings(KeyProperties.SIGNATURE_PADDING_RSA_PKCS1)
+            .build()
+        keyPairGenerator.initialize(keyGenParameterSpec)
+        val key = keyPairGenerator.generateKeyPair().private
+
+        val signature = Signature.getInstance("SHA256withRSA").apply {
+            initSign(key)
+        }
+
+        val biometricPrompt = BiometricPrompt(this, ContextCompat.getMainExecutor(this), object : BiometricPrompt.AuthenticationCallback() {
             override fun onAuthenticationError(errorCode: Int, errString: CharSequence) {
                 val errorMsg = "Authentication error: $errString (Code: $errorCode)"
                 Log.e("BiometricAuth", errorMsg)
@@ -86,7 +106,10 @@ class MainActivity : FlutterFragmentActivity() {
             }
 
             override fun onAuthenticationSucceeded(result: BiometricPrompt.AuthenticationResult) {
-                onResult("Authentication succeeded!")
+                val cryptoObject = result.cryptoObject
+                performKeyAccess(cryptoObject) { accessResult ->
+                    onResult(accessResult)
+                }
             }
 
             override fun onAuthenticationFailed() {
@@ -100,6 +123,30 @@ class MainActivity : FlutterFragmentActivity() {
             .setNegativeButtonText("Cancel")
             .build()
 
-        biometricPrompt.authenticate(promptInfo)
+        biometricPrompt.authenticate(promptInfo, BiometricPrompt.CryptoObject(signature))
+    }
+
+    private fun performKeyAccess(cryptoObject: BiometricPrompt.CryptoObject?, onResult: (String) -> Unit) {
+        if (cryptoObject == null) {
+            val errorMsg = "Error: CryptoObject is null, unable to sign data."
+            Log.e("KeyAccess", errorMsg)
+            onResult(errorMsg)
+            return
+        }
+
+        val accessMessage = try {
+            val data = "Data to be signed".toByteArray()
+            val signature = cryptoObject.signature ?: throw IllegalStateException("No signature available")
+            signature.update(data)
+            val signedData = signature.sign() // Save the signed data
+
+            // Convert signed data to a hex string for display
+            "Key Accessed Successfully. Signed Data: ${signedData.joinToString("") { "%02x".format(it) }}"
+        } catch (e: Exception) {
+            val errorMsg = "Error accessing key: ${e.message}"
+            Log.e("KeyAccess", errorMsg, e)
+            errorMsg
+        }
+        onResult(accessMessage)
     }
 }
