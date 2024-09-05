@@ -23,6 +23,8 @@ class MyHomePage extends StatefulWidget {
 class _MyHomePageState extends State<MyHomePage> {
   static const platform = MethodChannel('com.example.main/platform_channel');
   String _message = 'Waiting for message...';
+  String _signedKeyInput = '';
+  String _verificationResult = '';
 
   Future<void> _getNativeMessage() async {
     String message;
@@ -66,33 +68,80 @@ class _MyHomePageState extends State<MyHomePage> {
     });
   }
 
+  Future<void> _verifySignature() async {
+    String verificationResult;
+    try {
+      final String result = await platform.invokeMethod('verifySignature', {'signedKeyInput': _signedKeyInput});
+      verificationResult = result;
+    } on PlatformException catch (e) {
+      verificationResult = "Failed to verify signature: '${e.message}'.";
+    }
+
+    setState(() {
+      _verificationResult = verificationResult;
+    });
+  }
+
+  Future<void> _copySignedKey() async {
+    try {
+      await platform.invokeMethod('copySignedKeyToClipboard');
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Signed key copied to clipboard.')));
+    } on PlatformException catch (e) {
+      print("Failed to copy signed key: '${e.message}'.");
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
         title: Text('Platform Channel Example'),
       ),
-      body: Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: <Widget>[
-            Text(_message),
-            SizedBox(height: 20),
-            ElevatedButton(
-              onPressed: _getNativeMessage,
-              child: Text('Get Native Message'),
-            ),
-            SizedBox(height: 20),
-            ElevatedButton(
-              onPressed: _checkAndGenerateKeyPair,
-              child: Text('Check and Generate Key Pair'),
-            ),
-            SizedBox(height: 20),
-            ElevatedButton(
-              onPressed: _requestBiometricAuth,
-              child: Text('Request Biometric Authentication'),
-            ),
-          ],
+      body: Padding(
+        padding: const EdgeInsets.all(16.0),
+        child: Center(
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: <Widget>[
+              Text(_message),
+              SizedBox(height: 20),
+              ElevatedButton(
+                onPressed: _getNativeMessage,
+                child: Text('Get Native Message'),
+              ),
+              SizedBox(height: 20),
+              ElevatedButton(
+                onPressed: _checkAndGenerateKeyPair,
+                child: Text('Check and Generate Key Pair'),
+              ),
+              SizedBox(height: 20),
+              ElevatedButton(
+                onPressed: _requestBiometricAuth,
+                child: Text('Request Biometric Authentication'),
+              ),
+              SizedBox(height: 20),
+              TextField(
+                decoration: InputDecoration(labelText: 'Enter signed key input'),
+                onChanged: (value) {
+                  setState(() {
+                    _signedKeyInput = value;
+                  });
+                },
+              ),
+              SizedBox(height: 20),
+              ElevatedButton(
+                onPressed: _verifySignature,
+                child: Text('Verify Signature'),
+              ),
+              SizedBox(height: 20),
+              Text('Verification Result: $_verificationResult'),
+              SizedBox(height: 20),
+              ElevatedButton(
+                onPressed: _copySignedKey,
+                child: Text('Copy Signed Key to Clipboard'),
+              ),
+            ],
+          ),
         ),
       ),
     );
