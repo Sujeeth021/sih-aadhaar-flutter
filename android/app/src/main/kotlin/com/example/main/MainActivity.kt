@@ -82,10 +82,12 @@ class MainActivity : FlutterFragmentActivity() {
             val keyStore = KeyStore.getInstance("AndroidKeyStore").apply { load(null) }
 
             if (keyStore.containsAlias(alias)) {
-                deviceId to "Key Pair already exists with alias: $alias"
+                val publicKey = getPublicKey(alias) // Retrieve public key
+                deviceId to "Key Pair already exists with : $alias, Public Key: $publicKey"
             } else {
                 generateKeyPair(alias)
-                deviceId to "Key Pair generated successfully with alias: $alias"
+                val publicKey = getPublicKey(alias) // Retrieve newly generated public key
+                deviceId to "Key Pair generated successfully with alias: $alias, Public Key: $publicKey"
             }
         } catch (e: Exception) {
             deviceId to "Error checking key pair: ${e.message}"
@@ -108,6 +110,12 @@ class MainActivity : FlutterFragmentActivity() {
                 .build()
         )
         keyPairGenerator.generateKeyPair()
+    }
+
+    private fun getPublicKey(alias: String): String {
+        val keyStore = KeyStore.getInstance("AndroidKeyStore").apply { load(null) }
+        val publicKeyEntry = keyStore.getCertificate(alias).publicKey
+        return Base64.encodeToString(publicKeyEntry.encoded, Base64.NO_WRAP)
     }
 
     private fun createBiometricPromptForSignature(onResult: (String) -> Unit) {
@@ -230,7 +238,7 @@ class MainActivity : FlutterFragmentActivity() {
             val clip = android.content.ClipData.newPlainText("Signed Key", signedDataHex)
             clipboard.setPrimaryClip(clip)
         } else {
-            Log.e("Clipboard", "No signed data available to copy.")
+            Log.e("Clipboard", "No signed key available to copy.")
         }
     }
 }

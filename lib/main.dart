@@ -61,6 +61,7 @@ class _MyHomePageState extends State<MyHomePage> {
         _message = "Alias prefix cannot be empty.";
       });
       return;
+
     }
 
     String message;
