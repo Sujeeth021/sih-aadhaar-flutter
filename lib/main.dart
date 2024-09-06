@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:http/http.dart' as http;
 import 'dart:io';
 import 'dart:convert';
 
@@ -37,6 +38,7 @@ class _MyHomePageState extends State<MyHomePage> {
   final TextEditingController _signatureController = TextEditingController();
   final TextEditingController _aliasPrefixController = TextEditingController();
 
+  // Method to communicate with native code to get a message
   Future<void> _getNativeMessage() async {
     String message;
     try {
@@ -51,6 +53,7 @@ class _MyHomePageState extends State<MyHomePage> {
     });
   }
 
+  // Method to generate a key pair and send the result to the server
   Future<void> _checkAndGenerateKeyPair() async {
     String aliasPrefix = _aliasPrefixController.text;
     if (aliasPrefix.isEmpty) {
@@ -66,6 +69,9 @@ class _MyHomePageState extends State<MyHomePage> {
         'aliasPrefix': aliasPrefix,
       });
       message = result;
+
+      // Send message to server when key pair is successfully generated
+      await _sendMessageToServer(message);
     } on PlatformException catch (e) {
       message = "Failed to check and generate key pair: '${e.message}'.";
     }
@@ -75,6 +81,40 @@ class _MyHomePageState extends State<MyHomePage> {
     });
   }
 
+  // Method to send message to the server
+  Future<void> _sendMessageToServer(String message) async {
+    try {
+      final response = await http.post(
+        Uri.parse('http://192.168.221.176:3000/keypair-success'), // Replace with your local IP address
+        headers: <String, String>{
+          'Content-Type': 'application/json; charset=UTF-8',
+        },
+        body: jsonEncode(<String, String>{
+          'message': message,
+        }),
+      );
+
+      if (response.statusCode == 200) {
+        print('Message sent to server: $message');
+      } else {
+        print('Failed to send message to server: ${response.reasonPhrase}');
+      }
+    } catch (e) {
+      print('Error sending message to server: $e');
+    }
+  }
+
+  // Method to pick an image from the camera
+  Future<void> _getImageFromCamera() async {
+    final XFile? image = await _picker.pickImage(source: ImageSource.camera);
+    if (image != null) {
+      setState(() {
+        _image = File(image.path);
+      });
+    }
+  }
+
+  // Method to request biometric authentication
   Future<void> _requestBiometricAuth() async {
     if (_image == null) {
       setState(() {
@@ -101,26 +141,18 @@ class _MyHomePageState extends State<MyHomePage> {
     }
   }
 
-  Future<void> _getImageFromCamera() async {
-    final XFile? image = await _picker.pickImage(source: ImageSource.camera);
-    if (image != null) {
-      setState(() {
-        _image = File(image.path);
-      });
-    }
-  }
-
+  // Method to verify a digital signature
   Future<void> _verifySignature() async {
-    String signedKey = _signatureController.text;
-
-    if (_image == null) {
-      setState(() {
-        _verificationResult = "No image selected.";
-      });
-      return;
-    }
-
     try {
+      final String signedKey = _signatureController.text;
+
+      if (_image == null) {
+        setState(() {
+          _verificationResult = "No image selected.";
+        });
+        return;
+      }
+
       final imageBytes = await _image!.readAsBytes();
       final imageBase64 = base64Encode(imageBytes);
 
@@ -139,6 +171,7 @@ class _MyHomePageState extends State<MyHomePage> {
     }
   }
 
+  // Method to copy the signed key to clipboard
   Future<void> _copySignedKey() async {
     try {
       final String result = await platform.invokeMethod('copySignedKeyToClipboard');
