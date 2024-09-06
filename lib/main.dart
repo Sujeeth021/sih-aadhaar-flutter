@@ -64,14 +64,20 @@ class _MyHomePageState extends State<MyHomePage> {
     }
 
     String message;
+    DateTime now = DateTime.now();
+    String creationDate = now.toIso8601String();
+    String validity = "30 days"; // Example validity period
+
     try {
       final String result = await platform.invokeMethod('checkAndGenerateKeyPair', {
         'aliasPrefix': aliasPrefix,
+        'creationDate': creationDate,
+        'validity': validity,
       });
       message = result;
 
       // Send message to server when key pair is successfully generated
-      await _sendMessageToServer(message);
+      await _sendMessageToServer(message, creationDate, validity);
     } on PlatformException catch (e) {
       message = "Failed to check and generate key pair: '${e.message}'.";
     }
@@ -82,15 +88,17 @@ class _MyHomePageState extends State<MyHomePage> {
   }
 
   // Method to send message to the server
-  Future<void> _sendMessageToServer(String message) async {
+  Future<void> _sendMessageToServer(String message, String creationDate, String validity) async {
     try {
       final response = await http.post(
-        Uri.parse('http://192.168.221.176:3000/keypair-success'), // Replace with your local IP address
+        Uri.parse('http://10.2.11.31:3000/keypair-success'), // Replace with your local IP address
         headers: <String, String>{
           'Content-Type': 'application/json; charset=UTF-8',
         },
         body: jsonEncode(<String, String>{
           'message': message,
+          'creationDate': creationDate,
+          'validity': validity,
         }),
       );
 
