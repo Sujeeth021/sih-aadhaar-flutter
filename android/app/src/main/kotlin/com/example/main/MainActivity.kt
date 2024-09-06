@@ -27,9 +27,9 @@ import java.util.concurrent.Executor
 
 class MainActivity : FlutterFragmentActivity() {
     private val CHANNEL = "com.example.main/platform_channel"
-    private val aliasPrefix = "key_alias_"
     private var signedData: ByteArray? = null // To store signed data
     private var imageData: ByteArray? = null // To store image data
+    private var aliasPrefix: String = ""
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
@@ -40,6 +40,7 @@ class MainActivity : FlutterFragmentActivity() {
                         result.success("Hello from Android!")
                     }
                     "checkAndGenerateKeyPair" -> {
+                        aliasPrefix = call.argument<String>("aliasPrefix") ?: ""
                         val (deviceId, message) = checkAndGenerateKeyPair()
                         result.success("Device ID: $deviceId, $message")
                     }

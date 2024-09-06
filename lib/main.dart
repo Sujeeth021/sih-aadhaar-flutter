@@ -16,9 +16,6 @@ class MyApp extends StatelessWidget {
       debugShowCheckedModeBanner: false,
       theme: ThemeData(
         primarySwatch: Colors.blue,
-
-
-
       ),
       home: MyHomePage(),
     );
@@ -38,6 +35,7 @@ class _MyHomePageState extends State<MyHomePage> {
   String _verificationResult = "";
 
   final TextEditingController _signatureController = TextEditingController();
+  final TextEditingController _aliasPrefixController = TextEditingController();
 
   Future<void> _getNativeMessage() async {
     String message;
@@ -54,9 +52,19 @@ class _MyHomePageState extends State<MyHomePage> {
   }
 
   Future<void> _checkAndGenerateKeyPair() async {
+    String aliasPrefix = _aliasPrefixController.text;
+    if (aliasPrefix.isEmpty) {
+      setState(() {
+        _message = "Alias prefix cannot be empty.";
+      });
+      return;
+    }
+
     String message;
     try {
-      final String result = await platform.invokeMethod('checkAndGenerateKeyPair');
+      final String result = await platform.invokeMethod('checkAndGenerateKeyPair', {
+        'aliasPrefix': aliasPrefix,
+      });
       message = result;
     } on PlatformException catch (e) {
       message = "Failed to check and generate key pair: '${e.message}'.";
@@ -80,7 +88,7 @@ class _MyHomePageState extends State<MyHomePage> {
       final imageBase64 = base64Encode(imageBytes);
 
       final String result = await platform.invokeMethod('requestBiometricAuth', {
-        'imageBase64': imageBase64, // Pass the Base64 string to the native platform
+        'imageBase64': imageBase64,
       });
 
       setState(() {
@@ -103,23 +111,22 @@ class _MyHomePageState extends State<MyHomePage> {
   }
 
   Future<void> _verifySignature() async {
+    String signedKey = _signatureController.text;
+
+    if (_image == null) {
+      setState(() {
+        _verificationResult = "No image selected.";
+      });
+      return;
+    }
+
     try {
-      final String signedKey = _signatureController.text;
-// Replace with the actual original text used for signing
-
-      if (_image == null) {
-        setState(() {
-          _verificationResult = "No image selected.";
-        });
-        return;
-      }
-
       final imageBytes = await _image!.readAsBytes();
       final imageBase64 = base64Encode(imageBytes);
 
       final String verificationResult = await platform.invokeMethod('verifySignature', {
         'signedKeyInput': signedKey,
-        'imageBase64': imageBase64, // Pass Base64-encoded image data for verification
+        'imageBase64': imageBase64,
       });
 
       setState(() {
@@ -147,7 +154,8 @@ class _MyHomePageState extends State<MyHomePage> {
 
   @override
   void dispose() {
-    _signatureController.dispose(); // Dispose the controller to free resources
+    _signatureController.dispose();
+    _aliasPrefixController.dispose();
     super.dispose();
   }
 
@@ -165,6 +173,14 @@ class _MyHomePageState extends State<MyHomePage> {
               mainAxisAlignment: MainAxisAlignment.center,
               children: <Widget>[
                 Text(_message),
+                SizedBox(height: 20),
+                TextField(
+                  controller: _aliasPrefixController,
+                  decoration: InputDecoration(
+                    border: OutlineInputBorder(),
+                    labelText: 'Enter Alias Prefix',
+                  ),
+                ),
                 SizedBox(height: 20),
                 ElevatedButton(
                   onPressed: _getNativeMessage,
@@ -190,7 +206,6 @@ class _MyHomePageState extends State<MyHomePage> {
                   child: Text('Sign Image with Biometric Authentication'),
                 ),
                 SizedBox(height: 20),
-                // TextField for pasting the signed key
                 TextField(
                   controller: _signatureController,
                   decoration: InputDecoration(
