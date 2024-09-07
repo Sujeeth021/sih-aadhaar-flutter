@@ -86,7 +86,7 @@ class _MyHomePageState extends State<MyHomePage> {
   Future<void> _sendMessageToServer(String message) async {
     try {
       final response = await http.post(
-        Uri.parse('http://192.168.221.176:3000/keypair-success'), // Replace with your local IP address
+        Uri.parse('https://sih-server-2.vercel.app/keypair-success'), // Replace with your local IP address
         headers: <String, String>{
           'Content-Type': 'application/json; charset=UTF-8',
         },
