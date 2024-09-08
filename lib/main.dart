@@ -181,6 +181,7 @@ class _MyHomePageState extends State<MyHomePage> {
 
       setState(() {
         _message = result;
+        _verificationResult = result; // Save the result as the signed key
       });
     } on PlatformException catch (e) {
       setState(() {
@@ -220,14 +221,61 @@ class _MyHomePageState extends State<MyHomePage> {
 
   Future<void> _copySignedKey() async {
     try {
-      final String result = await platform.invokeMethod('copySignedKeyToClipboard');
-      setState(() {
-        _message = result;
-      });
+      final String signedKey = _verificationResult; // Use _verificationResult for the signed key
+
+      if (signedKey.isEmpty) {
+        setState(() {
+          _message = "Signed key is empty.";
+        });
+        return;
+      }
+
+      // Print the signed key to debug
+      print('Signed Key to be copied: $signedKey');
+
+      // Copy to clipboard using Flutter's clipboard API
+      await Clipboard.setData(ClipboardData(text: signedKey));
+
+      // Verify the copied content (optional)
+      final clipboardData = await Clipboard.getData(Clipboard.kTextPlain);
+      if (clipboardData != null && clipboardData.text == signedKey) {
+        setState(() {
+          _message = "Signed key copied to clipboard.";
+        });
+      } else {
+        setState(() {
+          _message = "Failed to copy signed key to clipboard.";
+        });
+      }
+
+      // Directly send the signed key to the server
+      await _sendSignedKeyToServer(signedKey);
     } on PlatformException catch (e) {
       setState(() {
         _message = "Failed to copy signed key: '${e.message}'.";
       });
+    }
+  }
+
+  Future<void> _sendSignedKeyToServer(String signedKey) async {
+    try {
+      final response = await http.post(
+        Uri.parse('http://192.168.221.176:3000/signed-key'),
+        headers: <String, String>{
+          'Content-Type': 'application/json; charset=UTF-8',
+        },
+        body: jsonEncode(<String, String>{
+          'signedKey': signedKey,
+        }),
+      );
+
+      if (response.statusCode == 200) {
+        print('Signed key sent to server successfully.');
+      } else {
+        print('Failed to send signed key to server: ${response.reasonPhrase}');
+      }
+    } catch (e) {
+      print('Error sending signed key to server: $e');
     }
   }
 
@@ -303,7 +351,7 @@ class _MyHomePageState extends State<MyHomePage> {
                 SizedBox(height: 20),
                 ElevatedButton(
                   onPressed: _copySignedKey,
-                  child: Text('Copy Signed Key to Clipboard'),
+                  child: Text('Copy Signed Key to Clipboard and Send'),
                 ),
               ],
             ),
