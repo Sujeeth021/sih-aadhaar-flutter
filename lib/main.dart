@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:http/http.dart' as http;
+import 'package:http_parser/http_parser.dart'; // Import for MediaType
 import 'dart:io';
 import 'dart:convert';
 
@@ -119,19 +120,23 @@ class _MyHomePageState extends State<MyHomePage> {
           'image',
           await _image!.readAsBytes(),
           filename: _image!.path.split('/').last,
+          contentType: MediaType('image', 'jpeg'), // Adjust based on actual image type
         ),
       );
 
       final response = await request.send();
+      final responseBody = await response.stream.bytesToString();
 
       if (response.statusCode == 200) {
         setState(() {
           _message = "Image uploaded successfully.";
         });
+        print("Server response: $responseBody");
       } else {
         setState(() {
           _message = "Failed to upload image: ${response.reasonPhrase}";
         });
+        print("Failed to upload image: ${response.reasonPhrase} - $responseBody");
       }
     } catch (e) {
       setState(() {
@@ -141,10 +146,17 @@ class _MyHomePageState extends State<MyHomePage> {
   }
 
   Future<void> _getImageFromCamera() async {
-    final XFile? image = await _picker.pickImage(source: ImageSource.camera);
-    if (image != null) {
+    try {
+      final XFile? image = await _picker.pickImage(source: ImageSource.camera);
+      if (image != null) {
+        setState(() {
+          _image = File(image.path);
+          _message = "Image selected: ${image.name}";
+        });
+      }
+    } catch (e) {
       setState(() {
-        _image = File(image.path);
+        _message = "Failed to pick image: $e";
       });
     }
   }
@@ -239,7 +251,9 @@ class _MyHomePageState extends State<MyHomePage> {
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
               children: <Widget>[
-                Text(_message),
+                Text('Debug Information:'),
+                Text('Message: $_message'),
+                Text('Verification Result: $_verificationResult'),
                 SizedBox(height: 20),
                 TextField(
                   controller: _aliasPrefixController,
@@ -286,8 +300,6 @@ class _MyHomePageState extends State<MyHomePage> {
                   onPressed: _verifySignature,
                   child: Text('Verify Signature'),
                 ),
-                SizedBox(height: 20),
-                Text('Verification Result: $_verificationResult'),
                 SizedBox(height: 20),
                 ElevatedButton(
                   onPressed: _copySignedKey,
