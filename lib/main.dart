@@ -38,7 +38,6 @@ class _MyHomePageState extends State<MyHomePage> {
   final TextEditingController _signatureController = TextEditingController();
   final TextEditingController _aliasPrefixController = TextEditingController();
 
-  // Method to communicate with native code to get a message
   Future<void> _getNativeMessage() async {
     String message;
     try {
@@ -53,7 +52,6 @@ class _MyHomePageState extends State<MyHomePage> {
     });
   }
 
-  // Method to generate a key pair and send the result to the server
   Future<void> _checkAndGenerateKeyPair() async {
     String aliasPrefix = _aliasPrefixController.text;
     if (aliasPrefix.isEmpty) {
@@ -61,7 +59,6 @@ class _MyHomePageState extends State<MyHomePage> {
         _message = "Alias prefix cannot be empty.";
       });
       return;
-
     }
 
     String message;
@@ -71,7 +68,6 @@ class _MyHomePageState extends State<MyHomePage> {
       });
       message = result;
 
-      // Send message to server when key pair is successfully generated
       await _sendMessageToServer(message);
     } on PlatformException catch (e) {
       message = "Failed to check and generate key pair: '${e.message}'.";
@@ -82,11 +78,10 @@ class _MyHomePageState extends State<MyHomePage> {
     });
   }
 
-  // Method to send message to the server
   Future<void> _sendMessageToServer(String message) async {
     try {
       final response = await http.post(
-        Uri.parse('https://sih-server-2.vercel.app/keypair-success'), // Replace with your local IP address
+        Uri.parse('http://192.168.221.176:3000/keypair-success'),
         headers: <String, String>{
           'Content-Type': 'application/json; charset=UTF-8',
         },
@@ -105,7 +100,46 @@ class _MyHomePageState extends State<MyHomePage> {
     }
   }
 
-  // Method to pick an image from the camera
+  Future<void> _uploadImageToServer() async {
+    if (_image == null) {
+      setState(() {
+        _message = "No image selected.";
+      });
+      return;
+    }
+
+    try {
+      final request = http.MultipartRequest(
+        'POST',
+        Uri.parse('http://192.168.221.176:3000/upload-image'),
+      );
+
+      request.files.add(
+        http.MultipartFile.fromBytes(
+          'image',
+          await _image!.readAsBytes(),
+          filename: _image!.path.split('/').last,
+        ),
+      );
+
+      final response = await request.send();
+
+      if (response.statusCode == 200) {
+        setState(() {
+          _message = "Image uploaded successfully.";
+        });
+      } else {
+        setState(() {
+          _message = "Failed to upload image: ${response.reasonPhrase}";
+        });
+      }
+    } catch (e) {
+      setState(() {
+        _message = "Error uploading image: $e";
+      });
+    }
+  }
+
   Future<void> _getImageFromCamera() async {
     final XFile? image = await _picker.pickImage(source: ImageSource.camera);
     if (image != null) {
@@ -115,7 +149,6 @@ class _MyHomePageState extends State<MyHomePage> {
     }
   }
 
-  // Method to request biometric authentication
   Future<void> _requestBiometricAuth() async {
     if (_image == null) {
       setState(() {
@@ -125,6 +158,8 @@ class _MyHomePageState extends State<MyHomePage> {
     }
 
     try {
+      await _uploadImageToServer();
+
       final imageBytes = await _image!.readAsBytes();
       final imageBase64 = base64Encode(imageBytes);
 
@@ -142,7 +177,6 @@ class _MyHomePageState extends State<MyHomePage> {
     }
   }
 
-  // Method to verify a digital signature
   Future<void> _verifySignature() async {
     try {
       final String signedKey = _signatureController.text;
@@ -172,7 +206,6 @@ class _MyHomePageState extends State<MyHomePage> {
     }
   }
 
-  // Method to copy the signed key to clipboard
   Future<void> _copySignedKey() async {
     try {
       final String result = await platform.invokeMethod('copySignedKeyToClipboard');
