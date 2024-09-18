@@ -35,22 +35,51 @@ class _MyHomePageState extends State<MyHomePage> {
   File? _image;
   String _message = "";
   String _verificationResult = "";
+  String? _selectedOption;
+  DateTime? _selectedDate;
 
   final TextEditingController _signatureController = TextEditingController();
   final TextEditingController _aliasPrefixController = TextEditingController();
+  List<String> _dropdownOptions = ['RSA', 'PKCS', 'OAEP']; // Default options
 
-  Future<void> _getNativeMessage() async {
-    String message;
-    try {
-      final String result = await platform.invokeMethod('getNativeMessage');
-      message = result;
-    } on PlatformException catch (e) {
-      message = "Failed to get native message: '${e.message}'.";
-    }
+  @override
+  void initState() {
+    super.initState();
+    _fetchDropdownOptions(); // Fetch dropdown options if needed
+  }
 
+  Future<void> _handleDropdownChange(String? newValue) async {
     setState(() {
-      _message = message;
+      _selectedOption = newValue;
     });
+
+    // Example action based on selected option
+    if (_selectedOption == 'RSA') {
+      // Perform action for RSA
+      print('RSA selected');
+    } else if (_selectedOption == 'PKCS') {
+      // Perform action for PKCS
+      print('PKCS selected');
+    } else if (_selectedOption == 'OAEP') {
+      // Perform action for OAEP
+      print('OAEP selected');
+    }
+  }
+
+  Future<void> _fetchDropdownOptions() async {
+    try {
+      final response = await http.get(Uri.parse('http://example.com/options'));
+      if (response.statusCode == 200) {
+        final List<String> options = List<String>.from(jsonDecode(response.body));
+        setState(() {
+          _dropdownOptions = options;
+        });
+      } else {
+        print('Failed to fetch options');
+      }
+    } catch (e) {
+      print('Error fetching options: $e');
+    }
   }
 
   Future<void> _checkAndGenerateKeyPair() async {
@@ -279,6 +308,25 @@ class _MyHomePageState extends State<MyHomePage> {
     }
   }
 
+  Future<void> _selectDate() async {
+    DateTime currentDate = DateTime.now();
+    DateTime initialDate = _selectedDate ?? currentDate;
+
+    final DateTime? pickedDate = await showDatePicker(
+      context: context,
+      initialDate: initialDate,
+      firstDate: DateTime(2000),
+      lastDate: DateTime(2101),
+    );
+
+    if (pickedDate != null && pickedDate != initialDate) {
+      setState(() {
+        _selectedDate = pickedDate;
+        _message = " ${pickedDate.toLocal().toString().split(' ')[0]}";
+      });
+    }
+  }
+
   @override
   void dispose() {
     _signatureController.dispose();
@@ -303,17 +351,51 @@ class _MyHomePageState extends State<MyHomePage> {
                 Text('Message: $_message'),
                 Text('Verification Result: $_verificationResult'),
                 SizedBox(height: 20),
+
+                // Dropdown Menu
+                DropdownButton<String>(
+                  value: _selectedOption,
+                  hint: Text('Select an Option'),
+                  items: _dropdownOptions.map((String option) {
+                    return DropdownMenuItem<String>(
+                      value: option,
+                      child: Text(option),
+                    );
+                  }).toList(),
+                  onChanged: _handleDropdownChange,
+                ),
+                SizedBox(height: 20),
+
+                Text('Selected Option: $_selectedOption'),
+                SizedBox(height: 20),
+
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Text(
+                      _selectedDate != null
+                          ? 'Key Expiry Date:' //${_selectedDate!.toLocal().toString().split(' ')[0]}'
+                          : 'No Expiry Date Selected',
+                      style: TextStyle(fontSize: 16), // Style for the text
+                    ),
+                    SizedBox(width: 10), // Space between the text and the button
+                    ElevatedButton(
+                      onPressed: _selectDate,
+                      child: Text(
+                        _selectedDate != null
+                            ? _selectedDate!.toLocal().toString().split(' ')[0]
+                            : 'Select Expiry Date',
+                      ),
+                    ),
+                  ],
+                ),                SizedBox(height: 20),
+
                 TextField(
                   controller: _aliasPrefixController,
                   decoration: InputDecoration(
                     border: OutlineInputBorder(),
                     labelText: 'Enter Alias Prefix',
                   ),
-                ),
-                SizedBox(height: 20),
-                ElevatedButton(
-                  onPressed: _getNativeMessage,
-                  child: Text('Get Native Message'),
                 ),
                 SizedBox(height: 20),
                 ElevatedButton(
