@@ -34,8 +34,6 @@ class _MyHomePageState extends State<MyHomePage> {
   final ImagePicker _picker = ImagePicker();
   File? _image;
   String _keyPairMessage = "";
-  String _uploadMessage = "";
-  String _biometricMessage = "";
   String _verificationResult = "";
   String _signedKey = "";
   String? _selectedOption;
@@ -127,12 +125,10 @@ class _MyHomePageState extends State<MyHomePage> {
       if (image != null) {
         setState(() {
           _image = File(image.path);
-          _uploadMessage = "Image selected: ${image.name}";
         });
       }
     } catch (e) {
       setState(() {
-        _uploadMessage = "Failed to pick image: $e";
       });
     }
   }
@@ -140,7 +136,6 @@ class _MyHomePageState extends State<MyHomePage> {
   Future<void> _uploadImageToServer() async {
     if (_image == null) {
       setState(() {
-        _uploadMessage = "No image selected.";
       });
       return;
     }
@@ -165,18 +160,15 @@ class _MyHomePageState extends State<MyHomePage> {
 
       if (response.statusCode == 200) {
         setState(() {
-          _uploadMessage = "Image uploaded successfully.";
         });
         print("Server response: $responseBody");
       } else {
         setState(() {
-          _uploadMessage = "Failed to upload image: ${response.reasonPhrase}";
         });
         print("Failed to upload image: ${response.reasonPhrase} - $responseBody");
       }
     } catch (e) {
       setState(() {
-        _uploadMessage = "Error uploading image: $e";
       });
     }
   }
@@ -184,7 +176,6 @@ class _MyHomePageState extends State<MyHomePage> {
   Future<void> _requestBiometricAuth() async {
     if (_image == null) {
       setState(() {
-        _biometricMessage = "No image selected.";
       });
       return;
     }
@@ -201,11 +192,9 @@ class _MyHomePageState extends State<MyHomePage> {
 
       setState(() {
         _signedKey = result;
-        _biometricMessage = "Biometric authentication successful.";
       });
-    } on PlatformException catch (e) {
+    } on PlatformException {
       setState(() {
-        _biometricMessage = "Failed to authenticate: '${e.message}'.";
       });
     }
   }
@@ -214,7 +203,6 @@ class _MyHomePageState extends State<MyHomePage> {
     try {
       if (_signedKey.isEmpty) {
         setState(() {
-          _biometricMessage = "Signed key is empty.";
         });
         return;
       }
@@ -224,18 +212,15 @@ class _MyHomePageState extends State<MyHomePage> {
       final clipboardData = await Clipboard.getData(Clipboard.kTextPlain);
       if (clipboardData != null && clipboardData.text == _signedKey) {
         setState(() {
-          _biometricMessage = "Signed key copied to clipboard.";
         });
       } else {
         setState(() {
-          _biometricMessage = "Failed to copy signed key to clipboard.";
         });
       }
 
       await _sendSignedKeyToServer(_signedKey);
-    } on PlatformException catch (e) {
+    } on PlatformException {
       setState(() {
-        _biometricMessage = "Failed to copy signed key: '${e.message}'.";
       });
     }
   }
@@ -394,7 +379,6 @@ class _MyHomePageState extends State<MyHomePage> {
                       onPressed: _getImageFromCamera,
                       child: Text('Capture Image'),
                     ),
-                    Text(_uploadMessage, style: TextStyle(color: Colors.green)),
                   ],
                 ),
                 SizedBox(height: 20),
@@ -411,7 +395,7 @@ class _MyHomePageState extends State<MyHomePage> {
                       onPressed: _requestBiometricAuth,
                       child: Text('Sign Image with Biometric Authentication'),
                     ),
-                    Text(_biometricMessage, style: TextStyle(color: Colors.green)),
+
                   ],
                 ),
                 SizedBox(height: 20),
