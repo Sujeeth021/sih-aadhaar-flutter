@@ -37,17 +37,18 @@ class _MyHomePageState extends State<MyHomePage> {
   String _uploadMessage = "";
   String _biometricMessage = "";
   String _verificationResult = "";
+  String _signedKey = "";
   String? _selectedOption;
   DateTime? _selectedDate;
 
-  final TextEditingController _signatureController = TextEditingController();
   final TextEditingController _aliasPrefixController = TextEditingController();
-  List<String> _dropdownOptions = ['RSA', 'PKCS', 'OAEP']; // Default options
+  final TextEditingController _signatureController = TextEditingController();
+  List<String> _dropdownOptions = ['RSA', 'PKCS', 'OAEP'];
 
   @override
   void initState() {
     super.initState();
-    _fetchDropdownOptions(); // Fetch dropdown options if needed
+    _fetchDropdownOptions();
   }
 
   Future<void> _handleDropdownChange(String? newValue) async {
@@ -101,7 +102,7 @@ class _MyHomePageState extends State<MyHomePage> {
   Future<void> _sendMessageToServer(String message) async {
     try {
       final response = await http.post(
-        Uri.parse('http://192.168.97.242:3000/keypair-success'),
+        Uri.parse('http://192.168.119.67:3000/keypair-success'),
         headers: <String, String>{
           'Content-Type': 'application/json; charset=UTF-8',
         },
@@ -147,7 +148,7 @@ class _MyHomePageState extends State<MyHomePage> {
     try {
       final request = http.MultipartRequest(
         'POST',
-        Uri.parse('http://192.168.97.242:3000/upload-image'),
+        Uri.parse('http://192.168.119.67:3000/upload-image'),
       );
 
       request.files.add(
@@ -155,7 +156,7 @@ class _MyHomePageState extends State<MyHomePage> {
           'image',
           await _image!.readAsBytes(),
           filename: _image!.path.split('/').last,
-          contentType: MediaType('image', 'jpeg'), // Adjust based on actual image type
+          contentType: MediaType('image', 'jpeg'),
         ),
       );
 
@@ -199,13 +200,65 @@ class _MyHomePageState extends State<MyHomePage> {
       });
 
       setState(() {
-        _biometricMessage = result;
-        _verificationResult = result; // Save the result as the signed key
+        _signedKey = result;
+        _biometricMessage = "Biometric authentication successful.";
       });
     } on PlatformException catch (e) {
       setState(() {
         _biometricMessage = "Failed to authenticate: '${e.message}'.";
       });
+    }
+  }
+
+  Future<void> _copySignedKey() async {
+    try {
+      if (_signedKey.isEmpty) {
+        setState(() {
+          _biometricMessage = "Signed key is empty.";
+        });
+        return;
+      }
+
+      await Clipboard.setData(ClipboardData(text: _signedKey));
+
+      final clipboardData = await Clipboard.getData(Clipboard.kTextPlain);
+      if (clipboardData != null && clipboardData.text == _signedKey) {
+        setState(() {
+          _biometricMessage = "Signed key copied to clipboard.";
+        });
+      } else {
+        setState(() {
+          _biometricMessage = "Failed to copy signed key to clipboard.";
+        });
+      }
+
+      await _sendSignedKeyToServer(_signedKey);
+    } on PlatformException catch (e) {
+      setState(() {
+        _biometricMessage = "Failed to copy signed key: '${e.message}'.";
+      });
+    }
+  }
+
+  Future<void> _sendSignedKeyToServer(String signedKey) async {
+    try {
+      final response = await http.post(
+        Uri.parse('http://192.168.119.67:3000/signed-key'),
+        headers: <String, String>{
+          'Content-Type': 'application/json; charset=UTF-8',
+        },
+        body: jsonEncode(<String, String>{
+          'signedKey': signedKey,
+        }),
+      );
+
+      if (response.statusCode == 200) {
+        print('Signed key sent to server successfully.');
+      } else {
+        print('Failed to send signed key to server: ${response.reasonPhrase}');
+      }
+    } catch (e) {
+      print('Error sending signed key to server: $e');
     }
   }
 
@@ -238,66 +291,6 @@ class _MyHomePageState extends State<MyHomePage> {
     }
   }
 
-  Future<void> _copySignedKey() async {
-    try {
-      final String signedKey = _verificationResult; // Use _verificationResult for the signed key
-
-      if (signedKey.isEmpty) {
-        setState(() {
-          _biometricMessage = "Signed key is empty.";
-        });
-        return;
-      }
-
-      // Print the signed key to debug
-      print('Signed Key to be copied: $signedKey');
-
-      // Copy to clipboard using Flutter's clipboard API
-      await Clipboard.setData(ClipboardData(text: signedKey));
-
-      // Verify the copied content (optional)
-      final clipboardData = await Clipboard.getData(Clipboard.kTextPlain);
-      if (clipboardData != null && clipboardData.text == signedKey) {
-        setState(() {
-          _biometricMessage = "Signed key copied to clipboard.";
-        });
-      } else {
-        setState(() {
-          _biometricMessage = "Failed to copy signed key to clipboard.";
-        });
-      }
-
-      // Directly send the signed key to the server
-      await _sendSignedKeyToServer(signedKey);
-    } on PlatformException catch (e) {
-      setState(() {
-        _biometricMessage = "Failed to copy signed key: '${e.message}'.";
-      });
-    }
-  }
-
-  Future<void> _sendSignedKeyToServer(String signedKey) async {
-    try {
-      final response = await http.post(
-        Uri.parse('http://192.168.97.242:3000/signed-key'),
-        headers: <String, String>{
-          'Content-Type': 'application/json; charset=UTF-8',
-        },
-        body: jsonEncode(<String, String>{
-          'signedKey': signedKey,
-        }),
-      );
-
-      if (response.statusCode == 200) {
-        print('Signed key sent to server successfully.');
-      } else {
-        print('Failed to send signed key to server: ${response.reasonPhrase}');
-      }
-    } catch (e) {
-      print('Error sending signed key to server: $e');
-    }
-  }
-
   Future<void> _selectDate() async {
     DateTime currentDate = DateTime.now();
     DateTime initialDate = _selectedDate ?? currentDate;
@@ -312,15 +305,14 @@ class _MyHomePageState extends State<MyHomePage> {
     if (pickedDate != null && pickedDate != initialDate) {
       setState(() {
         _selectedDate = pickedDate;
-        _uploadMessage = "Selected expiry date: ${pickedDate.toLocal().toString().split(' ')[0]}";
       });
     }
   }
 
   @override
   void dispose() {
-    _signatureController.dispose();
     _aliasPrefixController.dispose();
+    _signatureController.dispose();
     super.dispose();
   }
 
@@ -337,7 +329,6 @@ class _MyHomePageState extends State<MyHomePage> {
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
               children: <Widget>[
-                // Dropdown Menu
                 DropdownButton<String>(
                   value: _selectedOption,
                   hint: Text('Select an Option'),
@@ -350,7 +341,6 @@ class _MyHomePageState extends State<MyHomePage> {
                   onChanged: _handleDropdownChange,
                 ),
                 SizedBox(height: 20),
-
                 Text('Selected Option: $_selectedOption'),
                 SizedBox(height: 20),
 
@@ -384,50 +374,78 @@ class _MyHomePageState extends State<MyHomePage> {
                   ),
                 ),
                 SizedBox(height: 20),
-                ElevatedButton(
-                  onPressed: _checkAndGenerateKeyPair,
-                  child: Text('Check and Generate Key Pair'),
+
+                // Check and Generate Key Pair Button
+                Column(
+                  children: [
+                    ElevatedButton(
+                      onPressed: _checkAndGenerateKeyPair,
+                      child: Text('Check and Generate Key Pair'),
+                    ),
+                    Text(_keyPairMessage, style: TextStyle(color: Colors.green)),
+                  ],
                 ),
-                Text(_keyPairMessage, style: TextStyle(color: Colors.green)),
                 SizedBox(height: 20),
 
-                ElevatedButton(
-                  onPressed: _getImageFromCamera,
-                  child: Text('Capture Image'),
+                // Capture Image Button
+                Column(
+                  children: [
+                    ElevatedButton(
+                      onPressed: _getImageFromCamera,
+                      child: Text('Capture Image'),
+                    ),
+                    Text(_uploadMessage, style: TextStyle(color: Colors.green)),
+                  ],
                 ),
-                Text(_uploadMessage, style: TextStyle(color: Colors.green)),
                 SizedBox(height: 20),
 
                 if (_image != null) ...[
                   Image.file(_image!),
                   SizedBox(height: 20),
                 ],
-                ElevatedButton(
-                  onPressed: _requestBiometricAuth,
-                  child: Text('Sign Image with Biometric Authentication'),
+
+                // Biometric Authentication Button
+                Column(
+                  children: [
+                    ElevatedButton(
+                      onPressed: _requestBiometricAuth,
+                      child: Text('Sign Image with Biometric Authentication'),
+                    ),
+                    Text(_biometricMessage, style: TextStyle(color: Colors.green)),
+                  ],
                 ),
-                Text(_biometricMessage, style: TextStyle(color: Colors.green)),
                 SizedBox(height: 20),
 
-                TextField(
-                  controller: _signatureController,
-                  decoration: InputDecoration(
-                    border: OutlineInputBorder(),
-                    labelText: 'Paste Signed Key',
+                // Display Signed Key
+                if (_signedKey.isNotEmpty) ...[
+                  Text(
+                    'Signed Key: $_signedKey',
+                    style: TextStyle(fontSize: 16),
                   ),
-                  maxLines: 1,
-                ),
-                SizedBox(height: 20),
-                ElevatedButton(
-                  onPressed: _verifySignature,
-                  child: Text('Verify Signature'),
-                ),
-                SizedBox(height: 20),
-                Text(_verificationResult, style: TextStyle(color: Colors.green)),
-                SizedBox(height: 20),
-                ElevatedButton(
-                  onPressed: _copySignedKey,
-                  child: Text('Copy Signed Key to Clipboard and Send'),
+                  ElevatedButton(
+                    onPressed: _copySignedKey,
+                    child: Text('Copy Signed Key to Clipboard'),
+                  ),
+                  SizedBox(height: 20),
+                ],
+
+                // Verify Signature Button
+                Column(
+                  children: [
+                    TextField(
+                      controller: _signatureController,
+                      decoration: InputDecoration(
+                        border: OutlineInputBorder(),
+                        labelText: 'Paste Signed Key',
+                      ),
+                      maxLines: 1,
+                    ),
+                    ElevatedButton(
+                      onPressed: _verifySignature,
+                      child: Text('Verify Signature'),
+                    ),
+                    Text(_verificationResult, style: TextStyle(color: Colors.green)),
+                  ],
                 ),
                 SizedBox(height: 20),
               ],

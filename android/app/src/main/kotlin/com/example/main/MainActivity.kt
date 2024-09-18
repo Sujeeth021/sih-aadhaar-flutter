@@ -176,7 +176,7 @@ class MainActivity : FlutterFragmentActivity() {
 
                 // Convert signed data to a hex string for display
                 val signedDataHex = signedData!!.joinToString("") { "%02x".format(it) }
-                "Key Accessed Successfully. Signed Data: $signedDataHex"
+                "$signedDataHex"
             } catch (e: Exception) {
                 val errorMsg = "Error accessing key: ${e.message}"
                 Log.e("KeyAccess", errorMsg, e)
